@@ -483,7 +483,7 @@ plot(Addax.Thresh)
 
 ## Interactive Mapping
 
-We can also take this one step further and plot our predictive surface on an interactive map, so that we have a better idea of its context in the real world and also provide a way to post our results on relevant social media outlets.
+Lastly, we can also take this one step further and plot our predicted surface on an interactive map, so that we have a better idea of its context in the real world and also provide a way to post our results on relevant social media.
 
 ```{r Interactive, eval=T}
 # Create color ramp
@@ -496,7 +496,6 @@ Addax.predict.lat <- projectRaster(Addax.predict, crs=proj.info.LongLat) # Use d
 
 leaflet() %>%
   addTiles() %>%
-  #addCircles(wild.lat,lng = wild.lat@coords[,1], lat = wild.lat@coords[,2], radius=1, color = "black", fillOpacity = 0.5, fill=TRUE, opacity = 0.5) %>%
   addRasterImage(Addax.predict, colors = pal, opacity = 0.9) %>%
   addLegend(pal = pal, values = values(Addax.predict),
     title = "Predicted Addax Occurrence")
