@@ -242,11 +242,9 @@ visreg(glm.Addax, scale="response",partial=TRUE,line=list(col="blue"),fill=list(
 visreg(glm.Addax,"sndvi", scale="response",partial=TRUE,line=list(col="blue"),fill=list(col="gray"),ylim=c(0,1))
 ```
 
-### Making the Plot Look Nicer
+### Making the Plot Look a Little Prettier
 
-Can we improve the look of these plots and plot the x-axis values with the original values?    
-
-mportantly, we need to Here again, look at the `help(visreg)` to gather information on the items that can be changed/updated. This 
+Can we improve the look of these plots and plot the x-axis values with the original values?  The important item to remember here is that we need to transform the original values, which is easy enough since we have saved the parameter transformation values.
 
 ```{r PrettyPlot, eval=T}
 # Graph the NDVI response
@@ -367,7 +365,7 @@ plot(roccurve)
 
 Load the NDVI data and SRTM data to make a model prodection. 
 
-**Remember**, that we still will need to re-scale the raster layers, since our model results (our coefficients) are based on data that was also scaled.  We will use an NDVI image that was available from November 2007.  This was done because we also have an ancillary dataset (i.e., flight survey) that we used as an external dataset to assess model performance (data not shown).
+Remember, that we still will need to re-scale the raster layers, since our model results (our coefficients) are based on data that was also scaled.  We will use an NDVI image that was available from November 2007.  This was done because we also have an ancillary dataset (i.e., flight survey) that we used as an external dataset to assess model performance (data not shown).
 
 ### NDVI
 
@@ -418,7 +416,11 @@ Scale the rasters using the value summaries (mean and standard deviation) create
 1) What interpolation method should you use when resampling the raster dataset?
 
 ```{r Scale2, eval=T}
-# Scale values. To back transform, you need to:x - mean(x) / sd(x))
+# Scale values. To transform, you need to manually do some raster math based on the values we saved previously
+# Rememeber that centering and scaling meant that we:
+# x - mean(x) / sd(x))
+
+# Grab the mean and standard deviation values from the object saved above
 Scale.Val
 srough <- (rough2-Scale.Val[1,1])/Scale.Val[2,1]
 sndvi <- (ndvi2-Scale.Val[1,2])/Scale.Val[2,2]
@@ -481,7 +483,7 @@ Addax.Thresh <- Addax.predict >= presenceThresh
 plot(Addax.Thresh)
 ```
 
-## Interactive Mapping
+# Interactive Mapping
 
 Lastly, we can also take this one step further and plot our predicted surface on an interactive map, so that we have a better idea of its context in the real world and also provide a way to post our results on relevant social media.
 
