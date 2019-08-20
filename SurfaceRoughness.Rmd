@@ -20,15 +20,17 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Calculate Surface Roughness
 
-We assumed that Addax would select inter-dunal depressions. Instead of including the raw SRTM (elevation) data in our models, we created a variable from the raw elevation termed *Surface Roughness*. This variable is the change in elevation range between pixels. That is, it is the difference between the minimum and maximum values of a cell and its eight surrounding neighbors. Pixels with similar neighborhood values have a low change in elevation range (e.g., flat areas), whereas highly variables neighborhoods have a large change in elevation range (e.g., steep slopes) (Wilson, O’Connell, Brown, Guinan, & Grehan, 2007).
+We assumed that addax would select inter-dunal depressions. Instead of including the raw SRTM (elevation) data in our models, we created a variable from the raw elevation termed *Surface Roughness*. This variable is the change in elevation range between neighboring pixels. That is, it is the difference between the minimum and maximum values of a cell and its eight surrounding neighbors. Pixels with similar neighborhood values have a low change in elevation range (e.g., flat areas), whereas highly variables neighborhoods have a large change in elevation range (e.g., steep slopes) (Wilson, O’Connell, Brown, Guinan, & Grehan, 2007).
+
+Original data were downloaded from [EarthExplorer](http://earthexplorer.usgs.gov/). Additional information on SRTM can be found [here](https://www2.jpl.nasa.gov/srtm/). I selected a study area window and the data product in the [EarthExplorer](http://earthexplorer.usgs.gov/) application. The data were then bulk downloaded using the USGS [bda](https://earthexplorer.usgs.gov/bulk/) tool. 
+
+30-m data often have no data areas (i.e., "holes"). These are errors that must be further processed. To fill these areas, I downloaded an ancillary dataset (the 90-m SRTM gap-filled product (also available on the [EarthExplorer](http://earthexplorer.usgs.gov/) site). In ArcGIS, I used a conditional statement to fill the no data areas with the 90-meter data (con(IsNull(srtm_30m),srtm_90m,srtm_30m). Data were projected to UTM Zone 32 North, WGS84 datum (30-meter spatial resolution).
+
+Reference:
 
 Wilson, M.F.J., O'Connell, B., Brown, C., Guinan, J.C., Grehan, A.J., 2007. Multiscale terrain analysis of multibeam bathymetry data for habitat mapping on the continental slope. Marine Geodesy 30: 3-35.
 
-Original data were downloaded from [EarthExplorer](http://earthexplorer.usgs.gov/). Additional information on SRTM can be found [here](https://lta.cr.usgs.gov/SRTMVF). I selected a study area window and the data product in the [EarthExplorer](http://earthexplorer.usgs.gov/) application. The data were then bulk downloaded using the USGS [bda](https://earthexplorer.usgs.gov/bulk/) tool. 
-
-30-m data often have no data areas (i.e., "holes"). These are errors that must be further processed. To fill these areas, I also downloaded an ancillary dataset (the 90-m SRTM gap-filled product (also available on the[EarthExplorer}(http://earthexplorer.usgs.gov/) site). In ArcGIS, I used a conditional statement to fill the no data areas with the 90-meter data (con(IsNull(srtm_30m),srtm_90m,srtm_30m). Data were projected to UTM Zone 32 North, WGS84 datum (30-meter spatial resolution). 
-
-### Load Libraries
+### Loading Libraries
 
 ```{r Lib, eval=T, warning=F, message=F}
 # Remove everything in memory
@@ -41,17 +43,16 @@ library(rgdal)
 library(proj4)
 ```
 
-### Load Data
+### Loading Data
 
-Make sure your working directory is set to load the raster datasets in this excercise (`getwd()`), otherwise use the `setwd()` command.  Load a sample of the full srtm dataset.
+Here we load a subset of the full SRTM dataset for our study region.  This is simply because the dataset has 30-m resolution and can take a long time to process.
 
 ```{r Load, eval=T}
-# Load the 30-m SRTM dataset
+# Load the 30-m SRTM dataset, located in the Data directory
 srtm <- raster("Data/srtm_30m")
 ```
 
-Now load the spatial points dataset
-
+Now load the spatial points dataset (plot locations):
 ```{r Spatial Data, eval=T}
 
 # Load the point data
@@ -59,6 +60,24 @@ Sub <- readOGR(dsn="Data", layer="Clipped_Add")
 
 # Look at the file
 head(Sub)
+```
+
+**Questions:** 
+
+1) Are these files projected?  How would you check?
+2) What is the [R](https://cran.r-project.org/) function for re-projecting raster and/or spatial point data files if you needed to?
+3) What should you always do when importing spatial data (also good practice for any data you load into [R](https://cran.r-project.org/))?
+
+```{r Questions, eval=F, echo=F}
+# Answers to questions:
+# 1) Print the name of the file to the R console.  This will provide information on the attributes of the file.  If projected, these details will appear in the output.  Use compareCRS() to determine if the projections match
+srtm
+Sub
+compareCRS(srtm,Sub)
+# 2) For raster and vector files, the function differs
+help(st_transform)
+help(projectRaster)
+# 3) Plot your data.  R does not have projection on the fly capabilities, so if you data do not overlay, there is a problem.  See below for plotting of data.
 ```
 
 Plot the results
@@ -69,16 +88,16 @@ plot(srtm)
 plot(Sub,pch=15,cex=0.7,add=TRUE)
 ```
 
-### Generate Terrain Variable
+### Generate Terrain Variables
 
-Variables terrain variables can be applied to elevation datasets.  These include calculating the slope, aspect, Terrain Position Index (TPI), Terrain Ruggedness Index (TRI), and surface roughness.  Use `help(terrain)` for additional information.
+Terrain variables can be applied to elevation datasets (digital elevation models).  This includes calculating the slope, aspect, Terrain Position Index (TPI), Terrain Ruggedness Index (TRI), and surface roughness.  Use `help(terrain)` for additional information.
 
 ```{r Roughness, eval = T}
 rough <- terrain(srtm,opt='roughness')
 plot(rough)
-````
+```
 
-### Variable 
+### Extract Values 
 
 The `extract` command is extremely useful for joining point values from underlying datasets.  These values can easily be appended to your existing dataframe and used in analyses.
 
@@ -87,6 +106,7 @@ The `extract` command is extremely useful for joining point values from underlyi
 Sub$ROUGH <- extract(rough,Sub,method='simple',buffer=2500,fun=mean)
 
 # How is this different than just extracting at the point?
+# See `help(extract)` for details about function syntax.  
 Sub$RGH_PT <- extract(rough,Sub)
 
 # Look at the data
