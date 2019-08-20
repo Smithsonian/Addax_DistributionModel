@@ -1,5 +1,5 @@
 # extract R code
 library(knitr)
-file.exists("./SurfaceRoughness.Rmd")
-purl("./SurfaceRoughness.Rmd")
+file.exists("./Addax_DistributionModel.Rmd")
+purl("./Addax_DistributionModel.Rmd")
 
