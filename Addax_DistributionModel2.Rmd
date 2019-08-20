@@ -1,0 +1,391 @@
+---
+title: "Species Distribution Modeling"
+author: "Jared Stabach, Smithsonian Conservation Biology Institute"
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+    number_sections: false
+    #theme: united
+    #highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Addax distribution
+
+Addax (*Addax nasomaculatus*) are considered one of the rarest antelopes on earth, with an estimated population of **<100 individuals** in the wild. We assessed the distribution and occurrence of this species from field surveys collected by the [Sahara Conservation Fund](https://www.saharaconservation.org/) over a 7-year period (2008-2014). Our results provide insight into the factors contributing to species occurrence and are guiding field surveys to areas that have the potential to support small and geographically isolated populations of addax. We incorporated field-derived variables of vegetation cover with remote sensing measures of vegetation productivity (NDVI - [Normalized Difference Vegetation Index](https://earthobservatory.nasa.gov/Features/MeasuringVegetation/measuring_vegetation_2.php)) and surface roughness (derived from 30-m [SRTM](https://lta.cr.usgs.gov/SRTM)). Models were fit in a generalized linear regression framework to predict and evaluate species occurrence.
+
+![Addax moving across shifting sands in the Tin Toumma desert, Niger (Photo: T.Rabeil, SCF)](addax_termit_niger_0512_scf_rabeil_01.jpg)
+
+## Lab Excercise
+
+In this excercise, we will follow the steps detailed in:
+
+Stabach, J.A., T. Rabeil, V. Turmine, T. Wacher, T. Mueller, and P. Leimgruber. 2017. On the brink of extinction - Habitat selection of addax and dorcas gazelle across the Tin Toumma desert, Niger. Diversity and Distributions 23:581-591.
+
+We will use [R](https://cran.r-project.org/) for all analyses to create a species distribution model, highlighting the variables important in predicting addax occurrence. Like other excercises in [R](https://cran.r-project.org/), we will first load the necessary packages to perform the analyses. Use `help()` for any operations that you don't understand or that require additional information.
+
+### Load Packages
+```{r Library,message=FALSE,warning=FALSE}
+#install.packages("packagename")
+library(usdm)
+library(arm)
+library(visreg)
+library(pROC)
+library(DAAG)
+library(fields)
+library(MuMIn)
+library(gstat)
+library(sp)
+library(lubridate)
+```
+
+### Set Working Directory
+
+Use `getwd()` to determine your current working directory. If necessary, use the `setwd()` command to change to a different location. 
+
+```{r, eval = F}
+getwd()
+#setwd("D:/whatever")
+```
+
+### Addax Data File
+
+The raster data layers (NDVI and surface roughness) have already been extracted at plot locations. This has been done to focus on modeling the statistical relationships in this exercise. Building the spatial database, however, is hugely important and should not be overlooked. The layers included in analyses will ultimately depend on your scientific research questions and what is biologically relevant for your species.
+
+NDVI and surface roughness were summarized by calculating the mean value of all pixels within a 2.5-km radius of each plot location (a moving window analysis). Plot locations were spaced at 5-km intervals along line transects. Each line transect varied in length between 50-km and 100-km and were spaced ~10-km apart. Transects were repetitively sampled across years. Information on how to create and extract surface roughness is included as an addendum to this exercise.
+
+All data (including animals counts) were summarized at plot locations. We re-coded animal counts within a 2.5-km radius to a measure of occurrence (i.e, presence/absence). Thus, we modeled the data as a series of 1's and 0's, representing addax occurrence at plot locations. Data were aggregated in this fashion because of variability between surveys (i.e., the transects locations didn't overlap exactly) and because we did not have confidence in the accuracy of the number of individuals recorded at each sighting. In addition, distance to animal sighting locations were only recorded in a subset of the surveys. Sightings >500-m from the transect were removed due to an assumed undercounting bias (confirmed by investigating the frequency of sighthings in relation to distance). This allowed for a conservative broad-scale approach to incorporate extremely messy field data collected over multiple years. See more details in Stabach et al. 2017.
+
+```{r Load, eval = T}
+# Load prepared data file. NDVI and surface roughness already extracted.
+load(file="./Data/Addax_Dataset.RData")
+# Look at data
+head(Sub.All2)
+```
+
+Columns in the database include *Date* of survey, *X* and *Y* location of each plot, the number of addax and dorcas gazelle (a conspecific) sighted at each location, a unique plot ID (*Pt_ID*), and the presence/absence of vegetation species *Cornulaca monocantha* (Cornul), *Stipagrostis acutiflora* (Stipa1), and *Stipagrostis vulnerans* (Stipa2). These vegetation species were thought *a priori* to influence addax occurence and were collected at each plot location. *Human* disturbance (e.g., footprint, sighting, tire tracks) were also recorded (i.e., *Human* = 1). 
+
+Surface roughness (*Rough*) is defined as the change in local elevation range (i.e., the difference between the minimum and maximum values of a cell and its eight surrounding neighbors). *NDVI* (Normalized Difference Vegetation Index) is known to be strongly correlated with a region's vegetation productivity/greenness and has been used extensively as an important parameter in models predicting animal movement and habitat use. NDVI data (MOD13Q1) was downloaded as 16-day cloud-free data composites with a 250-m resolution.
+
+### Database Edits
+
+Some additional steps were necessary to prepare the datafile for modeling purposes. First, we added the *Season* of survey (a factor, based on the data collection date) to investigate occurrence changes throughout the year. Then, we recoded the addax amd dorcas gazelle presence data to investigate species interactions. Finally, we added the year of survey to investigate longitudinal changes over the study period.
+
+```{r Process, eval = T}
+# Create a Month Field
+Sub.All2$Month <- as.numeric(strftime(Sub.All2$Date,format="%m",tz="GMT"))
+# Add in the Season
+Sub.All2$Season <- ifelse(Sub.All2$Month >=3 & Sub.All2$Month <=6, "Dry",
+                          ifelse(Sub.All2$Month >=7 & Sub.All2$Month <=10, "Wet",
+                                 ifelse(Sub.All2$Month >=11 & Sub.All2$Month <=12, "Cold","Fix Problem")))
+# Make a dataframe (remove from spatial format)
+Sub.All2 <- as.data.frame(Sub.All2)
+
+# Re-code the occurrence records as presence/absence 
+Sub.All2$obsAddax <- ifelse(Sub.All2$Addax > 0, 1, 0) 
+Sub.All2$obsDorc <- ifelse(Sub.All2$Dorcas > 0, 1, 0)
+
+# Make appropriate fields factors (presence/absence)
+cols <- c("Cornul", "Stipa1", "Stipa2", "Season", "obsAddax", "obsDorc") 
+Sub.All2[cols] <- lapply(Sub.All2[cols], factor)
+
+# Include survey year as a factor in models. Not included above because I am changing the column name. 
+Sub.All2$Year <- as.factor(year(Sub.All2$Date))
+```
+
+### Summarize Dataset
+
+Execute a query to estimate the number of surveys conducted each year. Graph the data to visualize the patterns. How would you change the plotting function to visualize the extent of every survey?
+
+```{r Aggregate, eval=T}
+# Aggregate
+aggregate(as.character(Year) ~ Season, data = Sub.All2, unique)
+
+# Place data in a table to summarize results. 
+Unique.ID <- unique(Sub.All2$YearMonth)
+# Create matrix to hold everything
+dat6 <- matrix(NA,nrow = length(Unique.ID),ncol = 9,dimnames = list(c(),c("YearMonth","Year","Season","PresAddax","PresDorc","PrevAdd","PrevDorc","One","Both")))
+
+for (i in 1:length(Unique.ID)){
+	temp <- subset(Sub.All2, YearMonth == Unique.ID[i])
+		# Summarize dataset
+		dat6[i,1] <- Unique.ID[i]
+		dat6[i,2] <- as.character(unique(temp$Year))
+		dat6[i,3] <- as.character(unique(temp$Season))
+			obs.Add <- ifelse(temp$Addax > 0, 1, 0)
+			obs.Dorc <- ifelse(temp$Dorcas > 0, 1, 0)
+			Both <- obs.Add + obs.Dorc
+			Both2 <- ifelse(Both > 1, 1, 0) # Vector where both present
+			One <- ifelse(Both > 0, 1, 0) # At least one species present
+		dat6[i,4] <- sum(obs.Add)
+		dat6[i,5] <- sum(obs.Dorc)
+		dat6[i,6] <- round(sum(obs.Add)/length(obs.Add)*100,digits=1)
+		dat6[i,7] <- round(sum(obs.Dorc)/length(obs.Add)*100,digits=1)
+		dat6[i,8] <- round(sum(One)/length(obs.Add)*100,digits=1)
+		dat6[i,9] <- round(sum(Both2)/length(obs.Add)*100,digits=1)
+
+		# Output each survey...plot only the first survey
+		if(i==1){
+		plot(temp$X,temp$Y,xlab="Easting",ylab="Northing",xlim=c(min(Sub.All2$X),max(Sub.All2$X)), ylim=c(min(Sub.All2$Y),max(Sub.All2$Y)), frame=FALSE, main=Unique.ID[i], asp=1)
+}}
+# Look at result.  This should match Table 1 in Stabach et al. 2017.
+dat6 <- as.data.frame(dat6)
+dat6
+# Write to file if necessary
+#write.csv(dat6,file="./Addax_Dorcas_Prevalence.csv", quote = FALSE, row.names = FALSE)
+```
+
+### Scaling Parameter Values
+
+It is often helpful and necessary to scale continuous parameters that have vastly different value ranges (e.g., elevation and NDVI). Doing so can help with model convergence. While conclusions will remain the same, it is important to remember that data are not on the same scale as the original values and must be back-transformed when making raster predictions.  This is critical.
+
+```{r Scale, eval=TRUE}
+# Scale the parameters...Create a copy of the dataset
+Sub.Scale <- Sub.All2
+
+# Scale variables and append into original dataframe
+# Check out the scale command to make sure you know what the scale function (with center = TRUE) is doing
+Sub.Scale$shuman <- as.numeric(scale(Sub.Scale[,"Human"],center=TRUE))
+Sub.Scale$sndvi <- as.numeric(scale(Sub.Scale[,"ndvi"],center=TRUE))
+Sub.Scale$srough <- as.numeric(scale(Sub.Scale[,"ROUGH"],center=TRUE))
+Sub.Scale$sDorcas <- as.numeric(scale(Sub.Scale[,"Dorcas"],center=TRUE))
+Sub.Scale$sAddax <- as.numeric(scale(Sub.Scale[,"Addax"],center=TRUE))
+
+# Create a blank matrix to hold the Mean and Standard Deviation of each continuous variable included the dataset. These values will be necessary to make the prediction map.
+Scale.Val <- matrix(NA, 2, ncol(Sub.Scale[,c(15,17,8,12,7)]), dimnames=list(c("Mn","Sd"),c("Rough","NDVI","Dorcas","Human","Addax")))
+
+# Calculate the mean and standard deviations.
+Scale.Val[1,] <- apply(Sub.Scale[,c(15,17,8,12,7)],2,mean)
+Scale.Val[2,] <- apply(Sub.Scale[,c(15,17,8,12,7)],2,sd)
+
+# Look at values
+Scale.Val
+
+# Summarize the data.  Here, I'm just specifying the column numbers.
+# How to determine which columns are being referenced? 
+data.scale <- scale(Sub.Scale[,c(15,17,8,12,7)])
+(summary.data <- apply(data.scale,2,summary))
+```
+
+### Correlation Analysis
+
+Evalute if we have data redundancy.  Are there any continuous variables with high levels of correlation?  What is a reasonable correlation threshold?
+
+```{r Corr, eval=T}
+# Group variables together in a dataframe
+data.all <- as.data.frame(cbind(Sub.Scale$srough,Sub.Scale$sndvi,Sub.Scale$sDorcas,Sub.Scale$shuman,Sub.Scale$sAddax))
+
+# Variance Inflation Analysis
+(eval.vif <- vifstep(data.all))
+# Or, use the cor function...will give essentially the same result in a different format
+#cor(data.all)
+```
+
+## Data Model
+
+### Generalized Linear Regression (GLM)
+
+Model the occurrence of addax in a Generalized Linear Regression (GLM) framework. Our goal here is not necessarily to create the very best model. Instead, we aimed to identify the response of all variables at predicting addax occurrence. We then want to evaluate a submodel that contains only the remote sensing layers to make a prediction of habitat suitability across the landscape. We can easily assess how this 'submodel' compares with our 'full' model or the 'best' model. Why is using a GLM advantageous given the data and objectives?
+
+```{r Model, eval=T}
+# Create a full model with all the variables you think are important predictors of addax occurrence
+glm.Addax <- glm(obsAddax ~ srough + I(srough^2) + sndvi + I(sndvi^2) + Human + obsDorc + Stipa1 + Stipa2 + Cornul + Season + Year, data = Sub.Scale, family = binomial(link="logit"))
+# Summarize result and look at the confidence intervals
+summary(glm.Addax)
+confint(glm.Addax)
+
+# Graph results
+visreg(glm.Addax,scale="response",ylab="Prob",partial=TRUE,line=list(col="blue"),fill=list(col="gray"),ylim=c(0,1))
+
+# Plot the coefficients
+coefplot(glm.Addax, plot=TRUE, mar=c(1,4,5.1,2), intercept=FALSE, vertical=TRUE, main="", var.las=1, frame.plot=FALSE)
+
+```
+
+To plot the responses on the original scale, you need to back transform them. Here, I show how to do this for the parameter NDVI. From this code, could you do the same thing for the *Surface Roughness* variable? How would you edit/change the code?
+
+```{r PlotBack, eval=T}
+# Graph the NDVI response
+  # First, extract the Min and Max values from the summary.data above
+  MinVal <- summary.data[1,2]
+  MaxVal <- summary.data[6,2]
+
+	# Then, set the sequence in which to plot the values 
+	divs <- 100
+	x <- seq(MinVal, MaxVal, length.out=divs)
+	x.unscale <- x*Scale.Val[2,2]+Scale.Val[1,2]
+
+# In the visreg function, you then just need to specify which variable you want to plot.
+# You can then update the unscaled values into the plot, by specifying the axis with these values.
+visreg(glm.Addax,"sndvi",scale="response",ylab="Probability of Occurrence",xlab="NDVI",partial=TRUE, axes=FALSE, rug=0, ylim=c(0,1),line=list(col="black",lwd=2,lty=1),fill=list(col="grey"),points=list(col="black",cex=0.25,pch=19),frame=FALSE,main="Addax")
+axis(2,col="black",col.axis="black")
+axis(1,at=c(x[1],x[50],x[100]),lab=c(round(x.unscale[1],digits=2),round(x.unscale[50],digits=2),round(x.unscale[100],digits=2)),col="black",col.axis="black")
+```
+
+#### Surface Roughness
+
+How would you plot surface roughness instead? 
+
+You can easily edit the code described above to plot any of the other variables includes in the model. The key is to recognize that you need to change the columns that are being referenced in the summary.data table and the Scale.Val table to appropriately print the variables on the x-axis. Compare how the following code differs to plot the *Surface Roughness*.
+
+```{r PlotBack2, eval=T}
+  # Surface Roughness
+
+  # Really, all you need to do is recognize that you need to reference a different column in the summary.data and Scale.Val dataframes.
+  # Change the column values below
+  MinVal <- summary.data[1,1] # Note the change in column number
+  MaxVal <- summary.data[6,1] # Note the change in column number
+
+	# Then, set the sequence in which to plot the values 
+	divs <- 100
+	x <- seq(MinVal, MaxVal, length.out=divs)
+	x.unscale <- x*Scale.Val[2,1]+Scale.Val[1,1] # Note the change in column number
+
+# Now, you simply need to change the variable that you want to plot ('srough') and the x label (xlab)
+visreg(glm.Addax,"srough",scale="response",ylab="Probability of Occurrence",xlab="Surface Roughness",partial=TRUE, axes=FALSE, rug=0, ylim=c(0,1),line=list(col="black",lwd=2,lty=1),fill=list(col="grey"),points=list(col="black",cex=0.25,pch=19),frame=FALSE,main="Addax")
+axis(2,col="black",col.axis="black")
+axis(1,at=c(x[1],x[50],x[100]),lab=c(round(x.unscale[1],digits=2),round(x.unscale[50],digits=2),round(x.unscale[100],digits=2)),col="black",col.axis="black")
+```
+
+### Validation
+
+How good are the models? We can compare our full model to a null model, look at the Area Under the Curve (AUC) statistics, and perform a cross-validation analysis.  AUC compares the difference between the True Positive Classification Rate and a False Positive Rate (i.e., Specificity vs Sensitivity). It was first developed in World War II to determine the accuracy of detections of aircraft in radar.  We want the AUC curve to be as close to 1 as possible. Some guidelines:
+
+* 0.9 - 1: Excellent (A)
+* 0.8 - 0.9: Good (B)
+* 0.7 - 0.8: Fair (C)
+* 0.6 - 0.7: Poor (D)
+* 0.5 - 0.6: Fail (F)
+
+Cross-validation is a technique to partition the original data into a training and a test dataset. The training set is then used to generate the models and the test dataset is used to evaluate it.  Data are randomly divided between a number of 'folds'.  As each is removed, the remaining data are used to re-fit the model.  The omitted observations are then used to predict at the omitted observations. If an ancillary dataset is available, it can also be used to test the model. This would be the optimal way to evaluate the model.
+
+```{r Val, eval=T}
+# What's the AUC?
+predpr <- predict(glm.Addax, type=c("response"))
+(roccurve <- roc(Sub.Scale$obsAddax ~ predpr))
+plot(roccurve)
+
+# What's the cross-validation statistic?
+cv.binary(glm.Addax)
+```
+
+## Raster Prediction
+
+One of the most valuable parts of a species distribution model is predicting to locations where surveys were not performed. In order to make a prediction at these locations, we need data that has wall-to-wall coverage. Unfortunately, only two of our layers incorporated in the full model have full coverage (*NDVI* and *Surface Roughness*). 
+
+Create a model with these two layers, assessing how the model compares with the full model and predict across the entire study area. As you will see, model statistics indicate that this sub-model is not as good as the full model (compare the AIC, AUC, and cross-validation). 
+
+The model is still useful, however, as long as we are clear about its shortcomings (i.e., we'd expect the predictive power to be decreased since we are not including the fine scale data collected at individual plot locations). 
+
+### Create Model Subset and Evaluate
+
+```{r ModelSub, eval=T}
+glm.Addax2 <- glm(obsAddax ~ srough + I(srough^2) + sndvi + I(sndvi^2), data = Sub.Scale, family = binomial(link="logit"))
+
+# Summarize and print confidence intervals
+summary(glm.Addax2)
+confint(glm.Addax2)
+
+# AUC
+predpr <- predict(glm.Addax2, type=c("response"))
+(roccurve <- roc(Sub.Scale$obsAddax ~ predpr))
+plot(roccurve)
+
+# Cross-Validation
+cv.binary(glm.Addax2)
+```
+
+### Load Raster Layers
+
+Load the NDVI data and SRTM data to make a model prodection. Remember that we will need to re-scale the raster layers, since our model results (our coefficients) are based on data that was also scaled.  We will use an NDVI image that was available from November 2007.  This was done because we also have an ancillary dataset (i.e., flight survey) that we used as an external dataset to assess model performance (not shown).
+
+#### NDVI
+
+```{r Predict, eval=T}
+# Load NDVI data from flight survey date
+# Note that this file has 250-meter resolution (MOD13Q1 data product)
+# The SRTM data has 30-m resolution
+# We need these data sources to have the same resolution in order to make the prediction. Otherwise, we will get an error.
+#setwd("D:/Jared/Work/R/SCBI/MODIS/Niger_Validation")
+
+# Use the 2007 data from November for validation...matches the flight survey
+ndvi <- raster(paste0(getwd(),"/Data/MOD13Q1_Nov2017.tif"))
+# Convert raster to values to actual NDVI values
+ndvi <- ndvi*0.0001
+
+# Data needs to be summarized at 2.5km and scaled to match
+# Create a focal grid....to match the resampling done at the survey points.....this just creates a matrix
+# This is confusing, but it is a weighted grid...to summary values within the grid
+FoGrid <- focalWeight(ndvi,d=2500,type='circle')
+# Now Summarize the NDVI within the focalWeight grid
+ndvi2 <- focal(x=ndvi,w=FoGrid,fun=sum,na.rm=TRUE) # Need to use sum....because the focalWeight grid...creates a matrix of values that add to 1.  We want a summary of values within the focal grid
+
+# Plot the two results
+par(mfrow=c(1,2))
+plot(ndvi)
+plot(ndvi2)
+```
+
+#### Surface Roughness
+
+Now do the same procedure for the *Surface Roughness* layer.  *Rough* is a 30-m resolution file, so will take a longer time to process.
+
+```{r SRTM, eval=T}
+# Create a different focalWeight grid because the cell resolutions are different (30 meters instead of 250 meters)
+rough <- raster(paste0(getwd(),"/Data/Rough_Sub.tif"))
+
+FoGrid1 <- focalWeight(rough,d=2500,type='circle')
+rough2 <- focal(x=rough,w=FoGrid1,fun=sum,na.rm=TRUE)
+
+# Plot to see the two raster layers
+plot(rough)
+plot(rough2)
+```
+
+#### Scale Rasters and Resample
+
+Scale the rasters using the values summaries created above. Then, the NDVI raster file needs to be resampled to match the SRTM datafile. The extent of these files also needs to match.
+
+```{r Scale2, eval=T}
+# Scale values. To back transform, you need to:x - mean(x) / sd(x))
+Scale.Val
+rgh.scale <- (rough2-Scale.Val[1,1])/Scale.Val[2,1]
+ndvi.scale <- (ndvi2-Scale.Val[1,2])/Scale.Val[2,2]
+
+# Resample the grids so that they can be added together in the model.
+# Resampling the 30m to 250m will result in a faster calculation.
+# Resampling the 250m to 30m will keep the values
+ndvi.rsmp <- resample(ndvi.scale,rgh.scale,method="bilinear")
+
+# Compare the resolutions 
+compareRaster(rgh.scale,ndvi.rsmp)
+```
+
+#### Make Final Prediction
+
+Now that the rasters have been scaled, we can use the coefficients to make a final prediction.
+
+```{r FinalPredict, eval=T}
+# Summarize the model
+summary(glm.Addax2)
+
+coef <- summary(glm.Addax2)
+coef <- coef$coefficients
+
+Addax.predict <- (exp(coef[1] + rgh.scale*coef[2] + rgh.scale^2*coef[3] + ndvi.rsmp*coef[4] + ndvi.rsmp^2*coef[5])/
+(1 + exp(coef[1] + rgh.scale*coef[2] + rgh.scale^2*coef[3] + ndvi.rsmp*coef[4] + ndvi.rsmp^2*coef[5])))
+
+par(mfrow=c(1,1))
+plot(Addax.predict)
+
+# Write the raster to a directory
+#writeRaster(Addax.Thresh, 'EditDirectory.tif', format="GTiff", overwrite=TRUE)
+```

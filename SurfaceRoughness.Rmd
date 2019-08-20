@@ -1,0 +1,145 @@
+---
+title: "Surface Roughness"
+author: "Jared Stabach, Smithsonian Conservation Biology Institute"
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Calculate Surface Roughness
+
+We assumed that Addax would select inter-dunal depressions. Instead of including the raw SRTM (elevation) data in our models, we created a variable from the raw elevation termed *Surface Roughness*. This variable is the change in elevation range between pixels. That is, it is the difference between the minimum and maximum values of a cell and its eight surrounding neighbors. Pixels with similar neighborhood values have a low change in elevation range (e.g., flat areas), whereas highly variables neighborhoods have a large change in elevation range (e.g., steep slopes) (Wilson, O’Connell, Brown, Guinan, & Grehan, 2007).
+
+Wilson, M.F.J., O'Connell, B., Brown, C., Guinan, J.C., Grehan, A.J., 2007. Multiscale terrain analysis of multibeam bathymetry data for habitat mapping on the continental slope. Marine Geodesy 30: 3-35.
+
+Original data were downloaded from [EarthExplorer](http://earthexplorer.usgs.gov/). Additional information on SRTM can be found [here](https://lta.cr.usgs.gov/SRTMVF). I selected a study area window and the data product in the [EarthExplorer](http://earthexplorer.usgs.gov/) application. The data were then bulk downloaded using the USGS [bda](https://earthexplorer.usgs.gov/bulk/) tool. 
+
+30-m data often have no data areas (i.e., "holes"). These are errors that must be further processed. To fill these areas, I also downloaded an ancillary dataset (the 90-m SRTM gap-filled product (also available on the[EarthExplorer}(http://earthexplorer.usgs.gov/) site). In ArcGIS, I used a conditional statement to fill the no data areas with the 90-meter data (con(IsNull(srtm_30m),srtm_90m,srtm_30m). Data were projected to UTM Zone 32 North, WGS84 datum (30-meter spatial resolution). 
+
+### Load Libraries
+
+```{r Lib, eval=T, warning=F, message=F}
+# Remove everything in memory
+rm(list=ls())
+
+# Load raster and rgdal library
+library(raster)
+library(sp)
+library(rgdal)
+library(proj4)
+```
+
+### Set Working Directory
+
+```{r WDir, eval = F}
+getwd()
+```
+
+### Load Data
+
+This is a dataset subset of the full study area.
+
+```{r Load, eval=T}
+# Load the 30-m SRTM dataset
+#srtm <- raster(paste0(getwd(),"/Data/srtm_30m"))
+srtm <- raster("Data/srtm_30m")
+
+# Check resolution
+res(srtm)
+
+# The project of the file is already defined
+srtm
+
+# Plot the result
+#plot(srtm)
+```
+
+Now load the spatial point data
+
+```{r Spatial Data, eval=T}
+
+# Load the point data
+Sub <- readOGR(dsn="Data", layer="Clipped_Add")
+#plot(Sub,pch=15,cex=0.7,add=TRUE)
+# Look at the file
+head(Sub)
+# Look at the parameters 
+Sub
+
+# What if you had a .csv file
+# Load your csv, then make spatial
+MyData <- read.csv(file="Data/Clipped_Add_csvFile.csv",header=TRUE,sep=",")
+head(MyData)
+# Make SpatialPointsFile
+xy <- MyData[,c(5,6)]
+MyData.Spatial <- SpatialPointsDataFrame(coords= xy, data = MyData, 
+                                         proj4string = CRS("+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+
+# Look at the file
+head(MyData.Spatial)
+# Look at the parameters
+MyData.Spatial
+
+#plot(MyData.Spatial,pch=10,cex=0.5,col="red",add=TRUE)
+```
+
+Plot the results
+
+```{r PlotSRTM, eval=T}
+# Plot the result
+plot(srtm)
+plot(Sub,pch=15,cex=0.7,add=TRUE)
+plot(MyData.Spatial,pch=10,cex=0.5,col="red",add=TRUE)
+```
+
+### Generate Terrain Variables
+
+```{r Roughness, eval = T}
+rough <- terrain(srtm,opt='roughness')
+# Other options. Use help(terrain) for more information
+#TRI <- terrain(srtm,opt='TRI')
+#TPI <- terrain(srtm,opt='TPI')
+
+plot(rough)
+#plot(TRI)
+#plot(TPI)
+
+# Other variables that could be calculated
+#slope <- terrain(srtm,opt='slope', neighbors=8)
+#aspect <- terrain(srtm,opt='aspect', neighbors=8)
+# Or:
+#x <- terrain(srtm, opt=c('slope', 'aspect'), unit='degrees')
+#plot(x)
+#hill <- hillShade(slope,aspect,angle=45,direction=0)
+
+# Plot the hillshade and overlay the elevation (alpha is the transparency)
+#plot(hill,col=grey(0:100/100),legend=FALSE,main='Niger')
+#plot(srtm,col=rainbow(25,alpha=0.35), add=TRUE)
+```
+
+### Variable Extraction
+
+```{r Extract, eval=T}
+# Extract SRTM values at the point locations
+# Take the average roughness within a 2.5 km buffer
+Sub$ROUGH <- extract(rough,Sub,method='simple',buffer=2500,fun=mean)
+#Sub$TRI <- extract(TRI,Sub,method='simple',buffer=2500,fun=mean)
+#Sub$TPI <- extract(TPI,Sub,method='simple',buffer=2500,fun=mean)
+
+# How is this different than just extracting at the point?
+Sub$RGH_PT <- extract(rough,Sub)
+
+# Look at the data
+head(Sub)
+
+# You could do the same with the .csv file you loaded above
+#MyData.Spatial$ROUGH <- extract(rough,MyData.Spatial,method='simple',buffer=2500,fun=mean)
+#MyData.Spatial$RGH_PT <- extract(rough,MyData.Spatial)
+
+# Look at the Data
+#head(MyData.Spatial)
+```
