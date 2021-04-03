@@ -6,7 +6,6 @@
 0_IntroToLogisticRegression.Rmd
 1_Addax_DistributionModel.Rmd
 2_Addax_DistributionModel.Rmd
-*.Rmd
 Week4_Assignment.Rmd
 Addax_DistributionModel.Rproj
 Week4_Assignment.Rmd
@@ -15,6 +14,7 @@ Week4_Assignment.Rmd
 /Data/Rough_Sub.tif
 /Data/Clipped_Add_csvFile.csv
 /Data/Bolger.txt
+Archive/
 srtm_39_09.hdr
 srtm_39_09.tfw
 srtm_39_09.tif
