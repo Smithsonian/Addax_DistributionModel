@@ -3,9 +3,11 @@
 .RData
 .Ruserdata
 /Presentation/IntroductionLogisticRegression_Week4.pptx
-Archive/
+Archive/*
+0_IntroToLogisticRegression.Rmd
 1_Addax_DistributionModel.Rmd
 2_Addax_DistributionModel.Rmd
+Week4_Assignment.Rmd
 Addax_DistributionModel.Rproj
 Week4_Assignment.Rmd
 addax_termit_niger_0512_scf_rabeil_01.jpg
@@ -13,7 +15,11 @@ addax_termit_niger_0512_scf_rabeil_01.jpg
 /Data/srtm_30m
 /Data/Rough_Sub.tif
 /Data/Clipped_Add_csvFile.csv
+/Data/Bolger.txt
 srtm_39_09.hdr
 srtm_39_09.tfw
 srtm_39_09.tif
 gadm36_NER_0_sp.rds
+invlogit.JPG
+logregeq.JPG
+BolderStudyArea.JPG
