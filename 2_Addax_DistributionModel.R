@@ -96,8 +96,10 @@ plot(Occ$X,Occ$Y,xlab = "Easting", ylab = "Northing", main = "Plot Locations", f
 ## Un.Date <- unique(Occ$YearMonth)
 ## 
 ## for(i in 1:length(Un.Date)){
-##   temp.df <- subset(Occ, YearMonth == Un.Date[i])
-##   plot(temp.df$X,temp.df$Y,xlab = "Easting", ylab = "Northing", main = Un.Date[i], frame = FALSE, pch = ".", col="red", cex = 5, asp=1)
+##   #temp.df <- subset(Occ, YearMonth == Un.Date[i])
+##   #plot(temp.df$X,temp.df$Y,xlab = "Easting", ylab = "Northing", main = Un.Date[i], frame = FALSE, pch = ".", col="red", cex = 5, asp=1)
+## 
+##   plot(Occ[Occ$YearMonth == Un.Date[i],"X"],Occ[Occ$YearMonth == Un.Date[i],"Y"],xlab = "Easting", ylab = "Northing", main = Un.Date[i], frame = FALSE, pch = ".", col="red", cex = 5, asp=1)
 ## }
 
 
