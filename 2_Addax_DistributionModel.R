@@ -1,8 +1,8 @@
-## ----setup, include=FALSE----------------------------------------------------------------------------------------------------------------------------
+## ----setup, include=FALSE--------------------------------------------------------------------------
 knitr::opts_chunk$set(echo = TRUE)
 
 
-## ----Library, message=FALSE, warning=FALSE-----------------------------------------------------------------------------------------------------------
+## ----Library, message=FALSE, warning=FALSE---------------------------------------------------------
 # Remove objects from memory
 rm(list=ls())
 
@@ -18,7 +18,7 @@ library(usdm)
 library(visreg)
 
 
-## ----Load, eval = T----------------------------------------------------------------------------------------------------------------------------------
+## ----Load, eval = T--------------------------------------------------------------------------------
 # Load the Data Frame and see that ndvi, rough, and Occ are added to your R environment
 # The NDVI image is from November 2017 and will be used in our prediction
 # Note: I converted the spatialpointsdataframe to a simple dataframe for the analyses
@@ -32,7 +32,7 @@ head(Occ)
 #datatable(Occ, rownames = FALSE, filter="top", options = list(pageLength = 5, scrollX = T))
 
 
-## ----Recode------------------------------------------------------------------------------------------------------------------------------------------
+## ----Recode----------------------------------------------------------------------------------------
 # Create month, year and season fields
 Occ <- Occ %>% mutate(
   Month = month(Date),
@@ -67,7 +67,7 @@ Occ[cols] <- lapply(Occ[cols], factor) # You could change these individually, bu
 #str(Occ)
 
 
-## ----Aggregate, warning=F, message=F-----------------------------------------------------------------------------------------------------------------
+## ----Aggregate, warning=F, message=F---------------------------------------------------------------
 # Summarize
 Occ.Summary <- Occ %>%
   group_by(Year, Month, Season) %>%
@@ -87,12 +87,12 @@ Occ.Summary
 #write.csv(Occ.Summary, file="Addax_Dorcas_Prevalence.csv", quote = FALSE, row.names = FALSE)
 
 
-## ----Plot--------------------------------------------------------------------------------------------------------------------------------------------
+## ----Plot------------------------------------------------------------------------------------------
 # Plot
 plot(Occ$X,Occ$Y,xlab = "Easting", ylab = "Northing", main = "Plot Locations", frame = FALSE, pch = ".", col="red", cex = 5, asp=1)
 
 
-## ----Loop Plot, eval=F, echo=F-----------------------------------------------------------------------------------------------------------------------
+## ----Loop Plot, eval=F, echo=F---------------------------------------------------------------------
 ## Un.Date <- unique(Occ$YearMonth)
 ## 
 ## for(i in 1:length(Un.Date)){
@@ -103,7 +103,7 @@ plot(Occ$X,Occ$Y,xlab = "Easting", ylab = "Northing", main = "Plot Locations", f
 ## }
 
 
-## ----Scale, eval=T-----------------------------------------------------------------------------------------------------------------------------------
+## ----Scale, eval=T---------------------------------------------------------------------------------
 # Scale the continuous variables that we'll include in the modelling
 Occ <- Occ %>% mutate(
   sHuman = as.numeric(scale(Human)), # This is a bit ugly, but if you don't specify as "as.numeric", the variables can be difficult to plot
@@ -135,7 +135,7 @@ plot(ndvi, main = "Non-Scaled NDVI");plot(s.ndvi, main = "Scaled NDVI");plot(rou
 par(mfrow=c(1,1)) # Returning plotting window to normal
 
 
-## ----Corr, eval=T------------------------------------------------------------------------------------------------------------------------------------
+## ----Corr, eval=T----------------------------------------------------------------------------------
 # Assess the continuous variables we'll include in our analysis
 vifstep(Occ[,22:26]) # Including scaled Human Presence, NDVI, roughness, and Dorcas/Addax
 
@@ -144,9 +144,9 @@ vifstep(Occ[,22:26]) # Including scaled Human Presence, NDVI, roughness, and Dor
 #cor(Occ[,22:26])
 
 
-## ----Model, eval=T-----------------------------------------------------------------------------------------------------------------------------------
+## ----Model, eval=T---------------------------------------------------------------------------------
 # Create a full model with all the variables you think are important predictors of addax occurrence
-glm.Addax <- glm(obsAddax ~ rough + I(srough^2) + sndvi + I(sndvi^2) + sHuman + sDorcas + Stipa1 + Stipa2 + Cornul + Season + Year, 
+glm.Addax <- glm(obsAddax ~ srough + I(srough^2) + sndvi + I(sndvi^2) + sHuman + sDorcas + Stipa1 + Stipa2 + Cornul + Season + Year, 
                  data = Occ, 
                  family = binomial(link="logit"))
 # Summarize result
@@ -156,7 +156,7 @@ summary(glm.Addax)
 #confint(glm.Addax)
 
 
-## ----Model Graph, eval=T-----------------------------------------------------------------------------------------------------------------------------
+## ----Model Graph, eval=T---------------------------------------------------------------------------
 # Plot the coefficients
 coefplot(glm.Addax,
         plot=TRUE,
@@ -196,7 +196,7 @@ visreg(glm.Addax,"sndvi",
 par(mfrow=c(1,1))
 
 
-## ----Validation,eval=T-------------------------------------------------------------------------------------------------------------------------------
+## ----Validation,eval=T-----------------------------------------------------------------------------
 # Evaluate deviance residuals
 # No strong evidence of lack of fit.  Most residuals are around a value of 0.
 devresid <- resid(glm.Addax, type = "deviance")
@@ -211,7 +211,7 @@ plot(roccurve, main="AUC")
 cv.binary(glm.Addax)
 
 
-## ----ModelSub, eval=T--------------------------------------------------------------------------------------------------------------------------------
+## ----ModelSub, eval=T------------------------------------------------------------------------------
 glm.Addax2 <- glm(obsAddax ~ srough + I(srough^2) + sndvi + I(sndvi^2), 
                   data = Occ, 
                   family = binomial(link="logit"))
@@ -228,7 +228,7 @@ plot(roccurve) # Not great
 cv.binary(glm.Addax2)
 
 
-## ----Model Predict, eval=T---------------------------------------------------------------------------------------------------------------------------
+## ----Model Predict, eval=T-------------------------------------------------------------------------
 # We could physically calculate the prediction from the model coefficients:
 #coef <- summary(glm.Addax2)
 #coef <- coef$coefficients
@@ -252,7 +252,7 @@ Addax.predict <- predict(satImage, glm.Addax2, type="response", progress='text')
 plot(Addax.predict) # Not a great prediction, with mostly low values, but it highlights some important aeras.
 
 
-## ----Interactive, eval=T, warning=F, message=F-------------------------------------------------------------------------------------------------------
+## ----Interactive, eval=T, warning=F, message=F-----------------------------------------------------
 # Load ESRI imagery baselayer
 tmap_mode("view")
 tm_basemap("Esri.WorldImagery") +

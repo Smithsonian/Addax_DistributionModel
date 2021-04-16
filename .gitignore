@@ -3,12 +3,12 @@
 .RData
 .Ruserdata
 /Presentation/IntroductionLogisticRegression_Week4.pptx
+/Presentation/IntroductionLogisticRegression_Week4b.pptx
 0_IntroToLogisticRegression.Rmd
 1_Addax_DistributionModel.Rmd
 2_Addax_DistributionModel.Rmd
 Week4_Assignment.Rmd
 Addax_DistributionModel.Rproj
-Week4_Assignment.Rmd
 Data/info
 /Data/srtm_30m
 /Data/srtm_30m.aux.xml
@@ -26,3 +26,5 @@ BolderStudyArea.JPG
 IntroToDataAnalysis_Picture1.png
 Addax_DistributionModel.Rproj
 *.jpg
+Export_to_R.R
+
